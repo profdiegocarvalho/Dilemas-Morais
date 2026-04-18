@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
-import { db, storage } from '../lib/firebase';
+import { db } from '../lib/firebase';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { motion } from 'motion/react';
 import { Upload, X, Check, Loader2, AlertTriangle } from 'lucide-react';
 import { useAuth } from '../lib/AuthContext';
@@ -98,16 +97,13 @@ export const DilemmaForm: React.FC<DilemmaFormProps> = ({ onSuccess, onCancel })
     });
   };
 
-  const uploadImage = async (file: File, side: 'A' | 'B') => {
-    console.log(`Iniciando upload para opção ${side}...`);
-    const compressedBlob = await compressImage(file);
-    const path = `dilemmas/${Date.now()}_${side}_${file.name.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.jpg`;
-    console.log(`Caminho no Storage: ${path}`);
-    const storageRef = ref(storage, path);
-    const snapshot = await uploadBytes(storageRef, compressedBlob);
-    console.log(`Upload concluído para ${side}. Obtendo URL...`);
-    const url = await getDownloadURL(snapshot.ref);
-    return { url, path };
+  const blobToBase64 = (blob: Blob): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.onerror = () => reject(new Error('Falha ao converter Blob para Base64'));
+      reader.readAsDataURL(blob);
+    });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -121,28 +117,33 @@ export const DilemmaForm: React.FC<DilemmaFormProps> = ({ onSuccess, onCancel })
     setLoading(true);
     try {
       console.log("Estado de carregamento ativo.");
-      let resA = { url: '', path: '' };
-      let resB = { url: '', path: '' };
+      let dataA = '';
+      let dataB = '';
 
       if (optionA.image) {
-        resA = await uploadImage(optionA.image, 'A');
+        console.log("Processando imagem A...");
+        const blobA = await compressImage(optionA.image);
+        dataA = await blobToBase64(blobA);
       }
+      
       if (optionB.image) {
-        resB = await uploadImage(optionB.image, 'B');
+        console.log("Processando imagem B...");
+        const blobB = await compressImage(optionB.image);
+        dataB = await blobToBase64(blobB);
       }
 
-      console.log("Salvando documento no Firestore...");
+      console.log("Salvando documento no Firestore (Base64 Mode)...");
       await addDoc(collection(db, 'dilemmas'), {
         question,
         optionA: {
           description: optionA.description,
-          imageUrl: resA.url || null,
-          imagePath: resA.path || null
+          imageUrl: dataA || null,
+          imagePath: null // Deceased field, kept for schema compatibility
         },
         optionB: {
           description: optionB.description,
-          imageUrl: resB.url || null,
-          imagePath: resB.path || null
+          imageUrl: dataB || null,
+          imagePath: null
         },
         active: true,
         createdBy: user?.uid || 'anonymous',

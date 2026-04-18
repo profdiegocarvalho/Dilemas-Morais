@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { db, storage } from '../lib/firebase';
+import { db } from '../lib/firebase';
 import { collection, query, orderBy, getDocs, deleteDoc, doc } from 'firebase/firestore';
-import { ref, deleteObject } from 'firebase/storage';
 import { Dilemma } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
 import { Trash2, Loader2, AlertCircle, ExternalLink, Check } from 'lucide-react';
@@ -37,28 +36,8 @@ export const DilemmaList: React.FC = () => {
 
     setDeletingId(dilemma.id as string);
     try {
-      // 1. Delete from Firestore first
+      // images are embedded as Base64 in the document, so deleting the doc cleans up everything
       await deleteDoc(doc(db, 'dilemmas', dilemma.id as string));
-
-      // 2. Cleanup associated images in Storage
-      const deleteImage = async (scenario: any) => {
-        // Prioritize explicit path, fallback to URL ref
-        const identifier = scenario.imagePath || scenario.imageUrl;
-        if (!identifier) return;
-        
-        try {
-          const imageRef = ref(storage, identifier);
-          await deleteObject(imageRef);
-        } catch (e) {
-          console.warn("Could not delete storage object:", identifier, e);
-        }
-      };
-
-      await Promise.all([
-        deleteImage(dilemma.optionA),
-        deleteImage(dilemma.optionB)
-      ]);
-
       setDilemmas(prev => prev.filter(d => d.id !== dilemma.id));
     } catch (error) {
       console.error("Erro ao deletar:", error);

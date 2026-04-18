@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Dilemma, Scenario } from '../types';
-import { fallbackDilemmas } from '../services/dilemmaService';
 import { db } from '../lib/firebase';
-import { collection, query, where, getDocs } from 'firebase/firestore';
+import { collection, query, where, getDocs, limit } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'motion/react';
 import { Info, ChevronRight, AlertTriangle, Image as ImageIcon } from 'lucide-react';
 import { ScenarioImage } from '../components/ScenarioImage';
@@ -21,8 +20,12 @@ export const Judge: React.FC<JudgeProps> = ({ onComplete }) => {
   useEffect(() => {
     const load = async () => {
       try {
-        // Only load dilemmas from Firestore
-        const q = query(collection(db, 'dilemmas'), where('active', '==', true));
+        // Limited fetch (10 dilemmas max) for performance
+        const q = query(
+          collection(db, 'dilemmas'), 
+          where('active', '==', true),
+          limit(10)
+        );
         const snapshot = await getDocs(q);
         const data = snapshot.docs.map(doc => ({
           id: doc.id,
@@ -30,15 +33,13 @@ export const Judge: React.FC<JudgeProps> = ({ onComplete }) => {
         })) as Dilemma[];
 
         if (data.length > 0) {
-          // Shuffle all available manual dilemmas
+          // Shuffle the fetched batch
           setDilemmas(data.sort(() => Math.random() - 0.5));
         } else {
-          // Fallback only if database is completely empty
-          setDilemmas(fallbackDilemmas);
+          setDilemmas([]); // Empty state if no manual data exists
         }
       } catch (err) {
         console.error("Error loading dilemmas:", err);
-        setDilemmas(fallbackDilemmas);
       } finally {
         setLoading(false);
       }
@@ -56,7 +57,7 @@ export const Judge: React.FC<JudgeProps> = ({ onComplete }) => {
     }
   };
 
-  if (loading || dilemmas.length === 0) {
+  if (loading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[70vh] gap-6">
         <div className="relative w-20 h-20">
@@ -64,9 +65,21 @@ export const Judge: React.FC<JudgeProps> = ({ onComplete }) => {
            <div className="absolute inset-x-2 top-2 h-2 bg-black animate-pulse"></div>
         </div>
         <div className="text-center space-y-2">
-            <h3 className="text-2xl font-black uppercase italic tracking-widest">Processando Dilemas</h3>
-            <p className="text-muted-foreground font-bold font-mono">Sincronizando com o Cloud Ethics...</p>
+            <h3 className="text-2xl font-black uppercase italic tracking-widest">Preparando Sessão</h3>
+            <p className="text-muted-foreground font-bold font-mono">Carregando dilemas do banco de dados...</p>
         </div>
+      </div>
+    );
+  }
+
+  if (dilemmas.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[70vh] gap-6 max-w-md mx-auto text-center">
+        <AlertTriangle size={48} className="text-brutal-yellow" />
+        <h3 className="text-2xl font-black uppercase italic">Nenhum dilema cadastrado</h3>
+        <p className="text-muted-foreground font-bold italic">
+          O administrador ainda não cadastrou dilemas manuais no sistema.
+        </p>
       </div>
     );
   }

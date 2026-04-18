@@ -1,0 +1,79 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Default Deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Helpers ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      // Safe check for admin role or specific trusted email
+      return isSignedIn() && (
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin') ||
+        (request.auth.token.email == 'diego.carvalho@fsa.br' && request.auth.token.email_verified == true)
+      );
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function isValidUser(data) {
+      return data.uid == request.auth.uid &&
+             data.email is string &&
+             data.role in ['user', 'admin'] &&
+             (data.displayName == null || data.displayName is string) &&
+             (data.photoURL == null || data.photoURL is string);
+    }
+
+    // --- Collections ---
+
+    // USERS
+    match /users/{userId} {
+      allow get: if isOwner(userId) || isAdmin();
+      allow list: if isAdmin();
+      
+      allow create: if isSignedIn() && request.auth.uid == userId && 
+                       isValidUser(incoming()) &&
+                       incoming().role == 'user' && // Force default role on creation
+                       incoming().createdAt == request.time;
+                       
+      allow update: if isOwner(userId) && 
+                       incoming().role == resource.data.role && // Prevent self-elevation
+                       incoming().uid == resource.data.uid &&
+                       incoming().diff(resource.data).affectedKeys().hasOnly(['displayName', 'photoURL']);
+    }
+
+    // DILEMMAS
+    match /dilemmas/{dilemmaId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // VOTES
+    match /votes/{voteId} {
+      allow create: if isSignedIn() && 
+                       incoming().userId == request.auth.uid &&
+                       incoming().timestamp == request.time &&
+                       incoming().choice in ['A', 'B'];
+      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+    }
+  }
+}

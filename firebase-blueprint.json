@@ -1,0 +1,68 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile information",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "role": { "type": "string", "enum": ["user", "admin"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "role"]
+    },
+    "Dilemma": {
+      "title": "Dilemma",
+      "description": "Moral dilemma scenarios",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "question": { "type": "string" },
+        "optionA": { "$ref": "#/entities/Scenario" },
+        "optionB": { "$ref": "#/entities/Scenario" },
+        "active": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "createdBy": { "type": "string" }
+      },
+      "required": ["question", "optionA", "optionB", "active"]
+    },
+    "Scenario": {
+      "title": "Scenario",
+      "description": "Scenario details for a dilemma",
+      "type": "object",
+      "properties": {
+        "description": { "type": "string" },
+        "characters": { "type": "array" },
+        "isEthicalBoundary": { "type": "boolean" }
+      }
+    },
+    "Vote": {
+      "title": "Vote",
+      "description": "User vote on a dilemma",
+      "type": "object",
+      "properties": {
+        "dilemmaId": { "type": "string" },
+        "userId": { "type": "string" },
+        "choice": { "type": "string", "enum": ["A", "B"] },
+        "timestamp": { "type": "string", "format": "date-time" }
+      }
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "Individual user profiles"
+    },
+    "/dilemmas/{dilemmaId}": {
+      "schema": "Dilemma",
+      "description": "Collection of moral dilemmas"
+    },
+    "/votes/{voteId}": {
+      "schema": "Vote",
+      "description": "Votes cast by users"
+    }
+  }
+}
